@@ -6,45 +6,50 @@
 ========================================== */
 
 #include <string.h>
+#include <assert.h>
+#include <stdlib.h>
+
 #include "unity_fixture.h"
 #include "unity_internals.h"
 
-UNITY_FIXTURE_T UnityFixture;
-
 //If you decide to use the function pointer approach.
-int (*outputChar)(int) = putchar;
+/* DX_PATCH: As outputChar pointer approach is not used, and this generates a warning for
+   MSVC - removed. */
+/* int(*outputChar)(int) = putchar; */
 
-int verbose = 0;
+/* DX_PATCH: Fix GCC warning "no previous prototype for..." */
+void setUp(struct _Unity * const unity_p);
+void tearDown(struct _Unity * const unity_p);
+void setUp(struct _Unity * const unity_p)    { /*does nothing*/ }
+void tearDown(struct _Unity * const unity_p) { /*does nothing*/ }
 
-void setUp(void)    { /*does nothing*/ }
-void tearDown(void) { /*does nothing*/ }
-
-void announceTestRun(unsigned int runNumber)
+/* DX_PATCH: "static" modifier required to avoid GCC warning: no previous prototype for... */
+static void announceTestRun(unsigned int runNumber, struct _Unity * const unity_p)
 {
-    UnityPrint("Unity test run ");
-    UnityPrintNumber(runNumber+1);
-    UnityPrint(" of ");
-    UnityPrintNumber(UnityFixture.RepeatCount);
+    UnityPrint("Unity test run ", unity_p);
+    UnityPrintNumber(runNumber+1, unity_p);
+    UnityPrint(" of ", unity_p);
+    UnityPrintNumber(unity_p->RepeatCount, unity_p);
     UNITY_OUTPUT_CHAR('\n');
 }
 
-int UnityMain(int argc, char* argv[], void (*runAllTests)(void))
+int UnityMain(int argc, char* argv[], void (*runAllTests)(struct _Unity * const unity_p), struct _Unity * const unity_p)
 {
-    int result = UnityGetCommandLineOptions(argc, argv);
+    int result = UnityGetCommandLineOptions(argc, argv, unity_p);
     unsigned int r;
     if (result != 0)
         return result;
 
-    for (r = 0; r < UnityFixture.RepeatCount; r++)
+    for (r = 0; r < unity_p->RepeatCount; r++)
     {
-        announceTestRun(r);
-        UnityBegin();
-        runAllTests();
+        announceTestRun(r, unity_p);
+        UnityBegin(unity_p);
+        runAllTests(unity_p);
         UNITY_OUTPUT_CHAR('\n');
-        UnityEnd();
+        UnityEnd(unity_p);
     }
 
-    return UnityFailureCount();
+    return UnityFailureCount(unity_p);
 }
 
 static int selected(const char * filter, const char * name)
@@ -54,76 +59,93 @@ static int selected(const char * filter, const char * name)
     return strstr(name, filter) ? 1 : 0;
 }
 
-static int testSelected(const char* test)
+static int testSelected(const char* test, struct _Unity * const unity_p)
 {
-    return selected(UnityFixture.NameFilter, test);
+    return selected(unity_p->NameFilter, test);
 }
 
-static int groupSelected(const char* group)
+static int groupSelected(const char* group, struct _Unity * const unity_p)
 {
-    return selected(UnityFixture.GroupFilter, group);
+    return selected(unity_p->GroupFilter, group);
 }
 
-static void runTestCase()
+static void runTestCase(struct _Unity * const unity_p)
 {
 
 }
 
-void UnityTestRunner(unityfunction* setup,
-        unityfunction* testBody,
-        unityfunction* teardown,
+void UnityTestRunner(unityfunction * setup,
+        unityTestfunction * body,
+        unityTestfunction * teardown,
         const char * printableName,
         const char * group,
         const char * name,
-        const char * file, int line)
+        const char * file, int line, struct _Unity * const unity_p)
 {
-    if (testSelected(name) && groupSelected(group))
+    if (testSelected(name, unity_p) && groupSelected(group, unity_p))
     {
-        Unity.CurrentTestFailed = 0;
-        Unity.TestFile = file;
-        Unity.CurrentTestName = printableName;
-        Unity.CurrentTestLineNumber = line;
-        if (!UnityFixture.Verbose)
+        unity_p->CurrentTestFailed = 0;
+        unity_p->TestFile = file;
+        unity_p->CurrentTestName = printableName;
+        unity_p->CurrentTestLineNumber = line;
+        if (!unity_p->Verbose)
             UNITY_OUTPUT_CHAR('.');
         else
-            UnityPrint(printableName);
+            UnityPrint(printableName, unity_p);
 
-        Unity.NumberOfTests++;
+        unity_p->NumberOfTests++;
+#if defined(UNITY_DYNAMIC_MEM_DEBUG)
         UnityMalloc_StartTest();
-        UnityPointer_Init();
-
-        runTestCase();
+#endif
+#if defined(UNITY_CPP_UNIT_COMPAT)
+        UnityPointer_Init(unity_p);
+#endif 
+        runTestCase(unity_p);
+        /* remember setup has failed - skip teardown if so*/
+        bool hasSetupFailed = false;
         if (TEST_PROTECT())
         {
-            setup();
-            testBody();
+            setup(unity_p);
+            /*DX_PATCH for jumpless version. If setup failed don't perform the test*/
+            if (!unity_p->CurrentTestFailed) 
+            {
+                body(unity_p->testLocalStorage, unity_p);
+            }
+            else
+            {
+                hasSetupFailed  = true;
+            }
+        }
+        if (TEST_PROTECT() && !hasSetupFailed )
+        {
+            teardown(unity_p->testLocalStorage, unity_p);
         }
         if (TEST_PROTECT())
         {
-            teardown();
+#if defined(UNITY_CPP_UNIT_COMPAT)
+            UnityPointer_UndoAllSets(unity_p);
+#endif
+#if defined(UNITY_DYNAMIC_MEM_DEBUG)
+            if (!unity_p->CurrentTestFailed)
+                UnityMalloc_EndTest(unity_p);
+#endif
         }
-        if (TEST_PROTECT())
-        {
-            UnityPointer_UndoAllSets();
-            if (!Unity.CurrentTestFailed)
-                UnityMalloc_EndTest();
-        }
-        UnityConcludeFixtureTest();
+        UnityConcludeFixtureTest(unity_p);
     }
 }
 
-void UnityIgnoreTest(const char * printableName)
+void UnityIgnoreTest(const char * printableName, struct _Unity * const unity_p)
 {
-    Unity.NumberOfTests++;
-    Unity.CurrentTestIgnored = 1;
-    if (!UnityFixture.Verbose)
+    unity_p->NumberOfTests++;
+    unity_p->CurrentTestIgnored = 1;
+    if (!unity_p->Verbose)
         UNITY_OUTPUT_CHAR('!');
     else
-        UnityPrint(printableName);
-    UnityConcludeFixtureTest();
+        UnityPrint(printableName, unity_p);
+    UnityConcludeFixtureTest(unity_p);
 }
 
-
+#if defined(UNITY_DYNAMIC_MEM_DEBUG)
 //-------------------------------------------------
 //Malloc and free stuff
 //
@@ -131,13 +153,13 @@ void UnityIgnoreTest(const char * printableName)
 static int malloc_count;
 static int malloc_fail_countdown = MALLOC_DONT_FAIL;
 
-void UnityMalloc_StartTest()
+void UnityMalloc_StartTest(void)
 {
     malloc_count = 0;
     malloc_fail_countdown = MALLOC_DONT_FAIL;
 }
 
-void UnityMalloc_EndTest()
+void UnityMalloc_EndTest( struct _Unity * const unity_p )
 {
     malloc_fail_countdown = MALLOC_DONT_FAIL;
     if (malloc_count != 0)
@@ -186,6 +208,7 @@ void * unity_malloc(size_t size)
     malloc_count++;
 
     guard = (Guard*)malloc(size + sizeof(Guard) + 4);
+    assert(guard);
     guard->size = size;
     mem = (char*)&(guard[1]);
     memcpy(&mem[size], end, strlen(end) + 1);
@@ -241,7 +264,9 @@ void* unity_realloc(void * oldMem, size_t size)
     if (isOverrun(oldMem))
     {
         release_memory(oldMem);
-        TEST_FAIL_MESSAGE("Buffer overrun detected during realloc()");
+        /*DX_PATCH for jumless version*/
+        UnityPrint("Buffer overrun detected during realloc()", unity_p);
+        return 0;
     }
 
     if (size == 0)
@@ -259,6 +284,9 @@ void* unity_realloc(void * oldMem, size_t size)
     return newMem;
 }
 
+#endif /* UNITY_DYNAMIC_MEM_DEBUG */
+
+#if defined(UNITY_CPP_UNIT_COMPAT)
 
 //--------------------------------------------------------
 //Automatic pointer restoration functions
@@ -273,23 +301,23 @@ enum {MAX_POINTERS=50};
 static PointerPair pointer_store[MAX_POINTERS];
 static int pointer_index = 0;
 
-void UnityPointer_Init()
+void UnityPointer_Init( struct _Unity * const unity_p )
 {
     pointer_index = 0;
 }
 
-void UnityPointer_Set(void ** pointer, void * newValue)
+void UnityPointer_Set(void ** ptr, void * newValue, struct _Unity * const unity_p)
 {
     if (pointer_index >= MAX_POINTERS)
         TEST_FAIL_MESSAGE("Too many pointers set");
 
-    pointer_store[pointer_index].pointer = pointer;
-    pointer_store[pointer_index].old_value = *pointer;
-    *pointer = newValue;
+    pointer_store[pointer_index].pointer = ptr;
+    pointer_store[pointer_index].old_value = *ptr;
+    *ptr = newValue;
     pointer_index++;
 }
 
-void UnityPointer_UndoAllSets()
+void UnityPointer_UndoAllSets( struct _Unity * const unity_p )
 {
     while (pointer_index > 0)
     {
@@ -300,18 +328,19 @@ void UnityPointer_UndoAllSets()
     }
 }
 
-int UnityFailureCount()
+#endif
+int UnityFailureCount( struct _Unity * const unity_p )
 {
-    return Unity.TestFailures;
+    return unity_p->TestFailures;
 }
 
-int UnityGetCommandLineOptions(int argc, char* argv[])
+int UnityGetCommandLineOptions(int argc, char* argv[], struct _Unity * const unity_p)
 {
     int i;
-    UnityFixture.Verbose = 0;
-    UnityFixture.GroupFilter = 0;
-    UnityFixture.NameFilter = 0;
-    UnityFixture.RepeatCount = 1;
+    unity_p->Verbose = 0;
+    unity_p->GroupFilter = 0;
+    unity_p->NameFilter = 0;
+    unity_p->RepeatCount = 1;
 
     if (argc == 1)
         return 0;
@@ -320,7 +349,7 @@ int UnityGetCommandLineOptions(int argc, char* argv[])
     {
         if (strcmp(argv[i], "-v") == 0)
         {
-            UnityFixture.Verbose = 1;
+            unity_p->Verbose = 1;
             i++;
         }
         else if (strcmp(argv[i], "-g") == 0)
@@ -328,7 +357,7 @@ int UnityGetCommandLineOptions(int argc, char* argv[])
             i++;
             if (i >= argc)
                 return 1;
-            UnityFixture.GroupFilter = argv[i];
+            unity_p->GroupFilter = argv[i];
             i++;
         }
         else if (strcmp(argv[i], "-n") == 0)
@@ -336,18 +365,18 @@ int UnityGetCommandLineOptions(int argc, char* argv[])
             i++;
             if (i >= argc)
                 return 1;
-            UnityFixture.NameFilter = argv[i];
+            unity_p->NameFilter = argv[i];
             i++;
         }
         else if (strcmp(argv[i], "-r") == 0)
         {
-            UnityFixture.RepeatCount = 2;
+            unity_p->RepeatCount = 2;
             i++;
             if (i < argc)
             {
                 if (*(argv[i]) >= '0' && *(argv[i]) <= '9')
                 {
-                    UnityFixture.RepeatCount = atoi(argv[i]);
+                    unity_p->RepeatCount = atoi(argv[i]);
                     i++;
                 }
             }
@@ -359,29 +388,29 @@ int UnityGetCommandLineOptions(int argc, char* argv[])
     return 0;
 }
 
-void UnityConcludeFixtureTest()
+void UnityConcludeFixtureTest( struct _Unity * const unity_p )
 {
-    if (Unity.CurrentTestIgnored)
+    if (unity_p->CurrentTestIgnored)
     {
-        if (UnityFixture.Verbose)
+        if (unity_p->Verbose)
         {
             UNITY_OUTPUT_CHAR('\n');
         }
-        Unity.TestIgnores++;
+        unity_p->TestIgnores++;
     }
-    else if (!Unity.CurrentTestFailed)
+    else if (!unity_p->CurrentTestFailed)
     {
-        if (UnityFixture.Verbose)
+        if (unity_p->Verbose)
         {
-            UnityPrint(" PASS");
+            UnityPrint(" PASS", unity_p);
             UNITY_OUTPUT_CHAR('\n');
         }
     }
-    else if (Unity.CurrentTestFailed)
+    else if (unity_p->CurrentTestFailed)
     {
-        Unity.TestFailures++;
+        unity_p->TestFailures++;
     }
 
-    Unity.CurrentTestFailed = 0;
-    Unity.CurrentTestIgnored = 0;
+    unity_p->CurrentTestFailed = 0;
+    unity_p->CurrentTestIgnored = 0;
 }

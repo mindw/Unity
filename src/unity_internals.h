@@ -8,7 +8,8 @@
 #define UNITY_INTERNALS_H
 
 #include <stdio.h>
-#include <setjmp.h>
+/* DX_PATCH: jumpless version. #include <setjmp.h> removed*/
+#include <stdbool.h>
 
 // Unity attempts to determine sizeof(various types)
 // based on UINT_MAX, ULONG_MAX, etc. These are typically
@@ -257,14 +258,14 @@ extern int UNITY_OUTPUT_CHAR(int);
 #endif
 
 #ifndef UNITY_COUNTER_TYPE
-#define UNITY_COUNTER_TYPE _U_UINT
+#define UNITY_COUNTER_TYPE int
 #endif
 
 //-------------------------------------------------------
 // Internal Structs Needed
 //-------------------------------------------------------
 
-typedef void (*UnityTestFunction)(void);
+typedef void (*UnityTestFunction)(struct _Unity * const unity_p);
 
 #define UNITY_DISPLAY_RANGE_INT  (0x10)
 #define UNITY_DISPLAY_RANGE_UINT (0x20)
@@ -309,6 +310,8 @@ typedef enum
     UNITY_DISPLAY_STYLE_UNKNOWN
 } UNITY_DISPLAY_STYLE_T;
 
+
+/* DX_PATCH: jumpless version. "jmp_buf AbortFrame" removed from struct _Unity*/
 struct _Unity
 {
     const char* TestFile;
@@ -319,149 +322,162 @@ struct _Unity
     UNITY_COUNTER_TYPE TestIgnores;
     UNITY_COUNTER_TYPE CurrentTestFailed;
     UNITY_COUNTER_TYPE CurrentTestIgnored;
-    jmp_buf AbortFrame;
+    void * testLocalStorage;
+
+    // only used by the fixture - should not be changed per test
+    int Verbose;
+    unsigned int RepeatCount;
+    const char* NameFilter;
+    const char* GroupFilter;
 };
 
-extern struct _Unity Unity;
+//extern struct _Unity Unity;
 
 //-------------------------------------------------------
 // Test Suite Management
 //-------------------------------------------------------
 
-void UnityBegin(void);
-int  UnityEnd(void);
-void UnityConcludeTest(void);
-void UnityDefaultTestRun(UnityTestFunction Func, const char* FuncName, const int FuncLineNum);
+void UnityBegin(struct _Unity * const unity_p);
+int UnityEnd(struct _Unity * const unity_p);
+void UnityConcludeTest(struct _Unity * const unity_p);
+void UnityDefaultTestRun(UnityTestFunction Func, const char* FuncName, const int FuncLineNum, struct _Unity * const unity_p);
 
 //-------------------------------------------------------
 // Test Output
 //-------------------------------------------------------
 
-void UnityPrint(const char* string);
-void UnityPrintMask(const _U_UINT mask, const _U_UINT number);
-void UnityPrintNumberByStyle(const _U_SINT number, const UNITY_DISPLAY_STYLE_T style);
-void UnityPrintNumber(const _U_SINT number);
-void UnityPrintNumberUnsigned(const _U_UINT number);
-void UnityPrintNumberHex(const _U_UINT number, const char nibbles);
+void UnityPrint(const char* string, struct _Unity * const unity_p);
+void UnityPrintMask(const _U_UINT mask, const _U_UINT number, struct _Unity * const unity_p);
+void UnityPrintNumberByStyle(const _U_SINT number, const UNITY_DISPLAY_STYLE_T style, struct _Unity * const unity_p);
+void UnityPrintNumber(const _U_SINT number, struct _Unity * const unity_p);
+void UnityPrintNumberUnsigned(const _U_UINT number, struct _Unity * const unity_p);
+void UnityPrintNumberHex(const _U_UINT number, const char nibbles, struct _Unity * const unity_p);
 
 #ifdef UNITY_FLOAT_VERBOSE
-void UnityPrintFloat(const _UF number);
+void UnityPrintFloat(const _UF number, struct _Unity * const unity_p);
 #endif
 
 //-------------------------------------------------------
-// Test Assertion Fuctions
+// Test Assertion functions
 //-------------------------------------------------------
 //  Use the macros below this section instead of calling
 //  these directly. The macros have a consistent naming
 //  convention and will pull in file and line information
 //  for you.
 
-void UnityAssertEqualNumber(const _U_SINT expected,
+/* DX_PATCH: jump less version. Return off all assertion function changed from void to bool*/
+bool UnityAssertEqualNumber(const _U_SINT expected,
                             const _U_SINT actual,
                             const char* msg,
-                            const UNITY_LINE_TYPE lineNumber,
-                            const UNITY_DISPLAY_STYLE_T style);
+                            const UNITY_LINE_TYPE lineNumber, const char *file,
+                            const UNITY_DISPLAY_STYLE_T style, struct _Unity * const unity_p);
 
-void UnityAssertEqualIntArray(UNITY_PTR_ATTRIBUTE const void* expected,
+bool UnityAssertEqualIntArray(UNITY_PTR_ATTRIBUTE const void* expected,
                               UNITY_PTR_ATTRIBUTE const void* actual,
                               const _UU32 num_elements,
                               const char* msg,
-                              const UNITY_LINE_TYPE lineNumber,
-                              const UNITY_DISPLAY_STYLE_T style);
+                              const UNITY_LINE_TYPE lineNumber, const char *file,
+                              const UNITY_DISPLAY_STYLE_T style, struct _Unity * const unity_p);
 
-void UnityAssertBits(const _U_SINT mask,
+bool UnityAssertBits(const _U_SINT mask,
                      const _U_SINT expected,
                      const _U_SINT actual,
                      const char* msg,
-                     const UNITY_LINE_TYPE lineNumber);
+                     const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertEqualString(const char* expected,
+bool UnityAssertEqualString(const char* expected,
                             const char* actual,
                             const char* msg,
-                            const UNITY_LINE_TYPE lineNumber);
+                            const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertEqualStringArray( const char** expected,
+bool UnityAssertEqualStringArray( const char** expected,
                                   const char** actual,
                                   const _UU32 num_elements,
                                   const char* msg,
-                                  const UNITY_LINE_TYPE lineNumber);
+                                  const UNITY_LINE_TYPE lineNumber, struct _Unity * const unity_p);
 
-void UnityAssertEqualMemory( UNITY_PTR_ATTRIBUTE const void* expected,
+bool UnityAssertEqualMemory( UNITY_PTR_ATTRIBUTE const void* expected,
                              UNITY_PTR_ATTRIBUTE const void* actual,
                              const _UU32 length,
                              const _UU32 num_elements,
                              const char* msg,
-                             const UNITY_LINE_TYPE lineNumber);
+                             const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertNumbersWithin(const _U_SINT delta,
+bool UnityAssertNumbersWithin(const _U_SINT delta,
                               const _U_SINT expected,
                               const _U_SINT actual,
                               const char* msg,
-                              const UNITY_LINE_TYPE lineNumber,
-                              const UNITY_DISPLAY_STYLE_T style);
+                              const UNITY_LINE_TYPE lineNumber, const char *file,
+                              const UNITY_DISPLAY_STYLE_T style, struct _Unity * const unity_p);
 
-void UnityFail(const char* message, const UNITY_LINE_TYPE line);
+bool UnityFail(const char* message, const UNITY_LINE_TYPE line, const char *file, bool skipExecutionOnFailure, struct _Unity * const unity_p);
 
-void UnityIgnore(const char* message, const UNITY_LINE_TYPE line);
+bool UnityIgnore(const char* message, const UNITY_LINE_TYPE line, const char *file, struct _Unity * const unity_p);
 
 #ifndef UNITY_EXCLUDE_FLOAT
-void UnityAssertFloatsWithin(const _UF delta,
+bool UnityAssertFloatsWithin(const _UF delta,
                              const _UF expected,
                              const _UF actual,
                              const char* msg,
-                             const UNITY_LINE_TYPE lineNumber);
+                             const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertEqualFloatArray(UNITY_PTR_ATTRIBUTE const _UF* expected,
+bool UnityAssertEqualFloatArray(UNITY_PTR_ATTRIBUTE const _UF* expected,
                                 UNITY_PTR_ATTRIBUTE const _UF* actual,
                                 const _UU32 num_elements,
                                 const char* msg,
-                                const UNITY_LINE_TYPE lineNumber);
+                                const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertFloatIsInf(const _UF actual,
+bool UnityAssertFloatIsInf(const _UF actual,
                            const char* msg,
-                           const UNITY_LINE_TYPE lineNumber);
+                           const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertFloatIsNegInf(const _UF actual,
+bool UnityAssertFloatIsNegInf(const _UF actual,
                               const char* msg,
-                              const UNITY_LINE_TYPE lineNumber);
+                              const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertFloatIsNaN(const _UF actual,
+bool UnityAssertFloatIsNaN(const _UF actual,
                            const char* msg,
-                           const UNITY_LINE_TYPE lineNumber);
+                           const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 #endif
 
 #ifndef UNITY_EXCLUDE_DOUBLE
-void UnityAssertDoublesWithin(const _UD delta,
+bool UnityAssertDoublesWithin(const _UD delta,
                               const _UD expected,
                               const _UD actual,
                               const char* msg,
-                              const UNITY_LINE_TYPE lineNumber);
+                              const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertEqualDoubleArray(UNITY_PTR_ATTRIBUTE const _UD* expected,
+bool UnityAssertEqualDoubleArray(UNITY_PTR_ATTRIBUTE const _UD* expected,
                                  UNITY_PTR_ATTRIBUTE const _UD* actual,
                                  const _UU32 num_elements,
                                  const char* msg,
-                                 const UNITY_LINE_TYPE lineNumber);
+                                 const UNITY_LINE_TYPE lineNumber, const char *file, struct _Unity * const unity_p);
 
-void UnityAssertDoubleIsInf(const _UD actual,
+bool UnityAssertDoubleIsInf(const _UD actual,
                             const char* msg,
-                            const UNITY_LINE_TYPE lineNumber);
+                            const UNITY_LINE_TYPE lineNumber, struct _Unity * const unity_p);
 
-void UnityAssertDoubleIsNegInf(const _UD actual,
+bool UnityAssertDoubleIsNegInf(const _UD actual,
                                const char* msg,
-                               const UNITY_LINE_TYPE lineNumber);
+                               const UNITY_LINE_TYPE lineNumber, struct _Unity * const unity_p);
 
-void UnityAssertDoubleIsNaN(const _UD actual,
+bool UnityAssertDoubleIsNaN(const _UD actual,
                             const char* msg,
-                            const UNITY_LINE_TYPE lineNumber);
+                            const UNITY_LINE_TYPE lineNumber, struct _Unity * const unity_p);
 #endif
 
 //-------------------------------------------------------
 // Basic Fail and Ignore
 //-------------------------------------------------------
 
-#define UNITY_TEST_FAIL(line, message)   UnityFail(   (message), (UNITY_LINE_TYPE)line);
-#define UNITY_TEST_IGNORE(line, message) UnityIgnore( (message), (UNITY_LINE_TYPE)line);
+/* DX_PATCH: jumpless version. return added to assertion macros */
+#define UNITY_TEST_FAIL(line, message)   { UnityFail(   (message), (UNITY_LINE_TYPE)line, __FILE__, true, unity_p); return; }
+#define UNITY_TEST_IGNORE(line, message) { UnityIgnore( (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p); return; }
+
+/* DX_PATCH: New feature - skip rest of function if test failed before getting to this point */
+#define UNITY_TEST_FAIL_NO_SKIP(line, message)                                                   { UnityFail(   (message), (UNITY_LINE_TYPE)line, __FILE__, false, unity_p); return; }
+#define UNITY_TEST_SKIP_EXECUTION_ON_FAILURE(line, message)                                      if (unity_p->CurrentTestFailed != 0) {UNITY_TEST_FAIL_NO_SKIP((UNITY_LINE_TYPE)line, message);}
+
 
 //-------------------------------------------------------
 // Test Asserts
@@ -471,84 +487,84 @@ void UnityAssertDoubleIsNaN(const _UD actual,
 #define UNITY_TEST_ASSERT_NULL(pointer, line, message)                                           UNITY_TEST_ASSERT(((pointer) == NULL),  (UNITY_LINE_TYPE)line, message)
 #define UNITY_TEST_ASSERT_NOT_NULL(pointer, line, message)                                       UNITY_TEST_ASSERT(((pointer) != NULL),  (UNITY_LINE_TYPE)line, message)
 
-#define UNITY_TEST_ASSERT_EQUAL_INT(expected, actual, line, message)                             UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT)
-#define UNITY_TEST_ASSERT_EQUAL_INT8(expected, actual, line, message)                            UnityAssertEqualNumber((_U_SINT)(_US8 )(expected), (_U_SINT)(_US8 )(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT8)
-#define UNITY_TEST_ASSERT_EQUAL_INT16(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(_US16)(expected), (_U_SINT)(_US16)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT16)
-#define UNITY_TEST_ASSERT_EQUAL_INT32(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(_US32)(expected), (_U_SINT)(_US32)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT32)
-#define UNITY_TEST_ASSERT_EQUAL_UINT(expected, actual, line, message)                            UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT)
-#define UNITY_TEST_ASSERT_EQUAL_UINT8(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(_UU8 )(expected), (_U_SINT)(_UU8 )(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT8)
-#define UNITY_TEST_ASSERT_EQUAL_UINT16(expected, actual, line, message)                          UnityAssertEqualNumber((_U_SINT)(_UU16)(expected), (_U_SINT)(_UU16)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT16)
-#define UNITY_TEST_ASSERT_EQUAL_UINT32(expected, actual, line, message)                          UnityAssertEqualNumber((_U_SINT)(_UU32)(expected), (_U_SINT)(_UU32)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT32)
-#define UNITY_TEST_ASSERT_EQUAL_HEX8(expected, actual, line, message)                            UnityAssertEqualNumber((_U_SINT)(_US8 )(expected), (_U_SINT)(_US8 )(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX8)
-#define UNITY_TEST_ASSERT_EQUAL_HEX16(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(_US16)(expected), (_U_SINT)(_US16)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX16)
-#define UNITY_TEST_ASSERT_EQUAL_HEX32(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(_US32)(expected), (_U_SINT)(_US32)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX32)
-#define UNITY_TEST_ASSERT_BITS(mask, expected, actual, line, message)                            UnityAssertBits((_U_SINT)(mask), (_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line)
+#define UNITY_TEST_ASSERT_EQUAL_INT(expected, actual, line, message)                             if (UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT, unity_p)                  != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT8(expected, actual, line, message)                            if (UnityAssertEqualNumber((_U_SINT)(_US8 )(expected), (_U_SINT)(_US8 )(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT8, unity_p)   != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT16(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(_US16)(expected), (_U_SINT)(_US16)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT16, unity_p)  != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT32(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(_US32)(expected), (_U_SINT)(_US32)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT32, unity_p)  != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT(expected, actual, line, message)                            if (UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT, unity_p)                 != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT8(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(_UU8 )(expected), (_U_SINT)(_UU8 )(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT8, unity_p)  != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT16(expected, actual, line, message)                          if (UnityAssertEqualNumber((_U_SINT)(_UU16)(expected), (_U_SINT)(_UU16)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT16, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT32(expected, actual, line, message)                          if (UnityAssertEqualNumber((_U_SINT)(_UU32)(expected), (_U_SINT)(_UU32)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT32, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX8(expected, actual, line, message)                            if (UnityAssertEqualNumber((_U_SINT)(_US8 )(expected), (_U_SINT)(_US8 )(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX8, unity_p)   != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX16(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(_US16)(expected), (_U_SINT)(_US16)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX16, unity_p)  != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX32(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(_US32)(expected), (_U_SINT)(_US32)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX32, unity_p)  != 0) return;
+#define UNITY_TEST_ASSERT_BITS(mask, expected, actual, line, message)                            if (UnityAssertBits((_U_SINT)(mask), (_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p)                                 != 0) return;
 
-#define UNITY_TEST_ASSERT_INT_WITHIN(delta, expected, actual, line, message)                     UnityAssertNumbersWithin((_U_SINT)(delta), (_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT)
-#define UNITY_TEST_ASSERT_UINT_WITHIN(delta, expected, actual, line, message)                    UnityAssertNumbersWithin((_U_SINT)(delta), (_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT)
-#define UNITY_TEST_ASSERT_HEX8_WITHIN(delta, expected, actual, line, message)                    UnityAssertNumbersWithin((_U_SINT)(_U_UINT)(_UU8 )(delta), (_U_SINT)(_U_UINT)(_UU8 )(expected), (_U_SINT)(_U_UINT)(_UU8 )(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX8)
-#define UNITY_TEST_ASSERT_HEX16_WITHIN(delta, expected, actual, line, message)                   UnityAssertNumbersWithin((_U_SINT)(_U_UINT)(_UU16)(delta), (_U_SINT)(_U_UINT)(_UU16)(expected), (_U_SINT)(_U_UINT)(_UU16)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX16)
-#define UNITY_TEST_ASSERT_HEX32_WITHIN(delta, expected, actual, line, message)                   UnityAssertNumbersWithin((_U_SINT)(_U_UINT)(_UU32)(delta), (_U_SINT)(_U_UINT)(_UU32)(expected), (_U_SINT)(_U_UINT)(_UU32)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX32)
+#define UNITY_TEST_ASSERT_INT_WITHIN(delta, expected, actual, line, message)                     if (UnityAssertNumbersWithin((_U_SINT)(delta), (_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_UINT_WITHIN(delta, expected, actual, line, message)                    if (UnityAssertNumbersWithin((_U_SINT)(delta), (_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_HEX8_WITHIN(delta, expected, actual, line, message)                    if (UnityAssertNumbersWithin((_U_SINT)(_U_UINT)(_UU8 )(delta), (_U_SINT)(_U_UINT)(_UU8 )(expected), (_U_SINT)(_U_UINT)(_UU8 )(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX8, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_HEX16_WITHIN(delta, expected, actual, line, message)                   if (UnityAssertNumbersWithin((_U_SINT)(_U_UINT)(_UU16)(delta), (_U_SINT)(_U_UINT)(_UU16)(expected), (_U_SINT)(_U_UINT)(_UU16)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX16, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_HEX32_WITHIN(delta, expected, actual, line, message)                   if (UnityAssertNumbersWithin((_U_SINT)(_U_UINT)(_UU32)(delta), (_U_SINT)(_U_UINT)(_UU32)(expected), (_U_SINT)(_U_UINT)(_UU32)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX32, unity_p) != 0) return;
 
-#define UNITY_TEST_ASSERT_EQUAL_PTR(expected, actual, line, message)                             UnityAssertEqualNumber((_U_SINT)(_UP)(expected), (_U_SINT)(_UP)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_POINTER)
-#define UNITY_TEST_ASSERT_EQUAL_STRING(expected, actual, line, message)                          UnityAssertEqualString((const char*)(expected), (const char*)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_EQUAL_MEMORY(expected, actual, len, line, message)                     UnityAssertEqualMemory((UNITY_PTR_ATTRIBUTE void*)(expected), (UNITY_PTR_ATTRIBUTE void*)(actual), (_UU32)(len), 1, (message), (UNITY_LINE_TYPE)line)
+#define UNITY_TEST_ASSERT_EQUAL_PTR(expected, actual, line, message)                             if (UnityAssertEqualNumber((_U_SINT)(_UP)(expected), (_U_SINT)(_UP)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_POINTER, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_STRING(expected, actual, line, message)                          if (UnityAssertEqualString((const char*)(expected), (const char*)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_MEMORY(expected, actual, len, line, message)                     if (UnityAssertEqualMemory((UNITY_PTR_ATTRIBUTE void*)(expected), (UNITY_PTR_ATTRIBUTE void*)(actual), (_UU32)(len), 1, (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
 
-#define UNITY_TEST_ASSERT_EQUAL_INT_ARRAY(expected, actual, num_elements, line, message)         UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT)
-#define UNITY_TEST_ASSERT_EQUAL_INT8_ARRAY(expected, actual, num_elements, line, message)        UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT8)
-#define UNITY_TEST_ASSERT_EQUAL_INT16_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT16)
-#define UNITY_TEST_ASSERT_EQUAL_INT32_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT32)
-#define UNITY_TEST_ASSERT_EQUAL_UINT_ARRAY(expected, actual, num_elements, line, message)        UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT)
-#define UNITY_TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT8)
-#define UNITY_TEST_ASSERT_EQUAL_UINT16_ARRAY(expected, actual, num_elements, line, message)      UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT16)
-#define UNITY_TEST_ASSERT_EQUAL_UINT32_ARRAY(expected, actual, num_elements, line, message)      UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT32)
-#define UNITY_TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, actual, num_elements, line, message)        UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX8)
-#define UNITY_TEST_ASSERT_EQUAL_HEX16_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX16)
-#define UNITY_TEST_ASSERT_EQUAL_HEX32_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX32)
-#define UNITY_TEST_ASSERT_EQUAL_PTR_ARRAY(expected, actual, num_elements, line, message)         UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(_UP*)(expected), (const void*)(_UP*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_POINTER)
-#define UNITY_TEST_ASSERT_EQUAL_STRING_ARRAY(expected, actual, num_elements, line, message)      UnityAssertEqualStringArray((const char**)(expected), (const char**)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_EQUAL_MEMORY_ARRAY(expected, actual, len, num_elements, line, message) UnityAssertEqualMemory((UNITY_PTR_ATTRIBUTE void*)(expected), (UNITY_PTR_ATTRIBUTE void*)(actual), (_UU32)(len), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line)
+#define UNITY_TEST_ASSERT_EQUAL_INT_ARRAY(expected, actual, num_elements, line, message)         if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT8_ARRAY(expected, actual, num_elements, line, message)        if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT8, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT16_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT16, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT32_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT32, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT_ARRAY(expected, actual, num_elements, line, message)        if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT8, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT16_ARRAY(expected, actual, num_elements, line, message)      if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT16, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT32_ARRAY(expected, actual, num_elements, line, message)      if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT32, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, actual, num_elements, line, message)        if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX8, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX16_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX16, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX32_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(expected), (UNITY_PTR_ATTRIBUTE const void*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX32, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_PTR_ARRAY(expected, actual, num_elements, line, message)         if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const void*)(_UP*)(expected), (const void*)(_UP*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_POINTER, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_STRING_ARRAY(expected, actual, num_elements, line, message)      if (UnityAssertEqualStringArray((const char**)(expected), (const char**)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_MEMORY_ARRAY(expected, actual, len, num_elements, line, message) if (UnityAssertEqualMemory((UNITY_PTR_ATTRIBUTE void*)(expected), (UNITY_PTR_ATTRIBUTE void*)(actual), (_UU32)(len), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__) != 0) return;
 
 #ifdef UNITY_SUPPORT_64
-#define UNITY_TEST_ASSERT_EQUAL_INT64(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT64)
-#define UNITY_TEST_ASSERT_EQUAL_UINT64(expected, actual, line, message)                          UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT64)
-#define UNITY_TEST_ASSERT_EQUAL_HEX64(expected, actual, line, message)                           UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX64)
-#define UNITY_TEST_ASSERT_EQUAL_INT64_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const _U_SINT*)(expected), (UNITY_PTR_ATTRIBUTE const _U_SINT*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_INT64)
-#define UNITY_TEST_ASSERT_EQUAL_UINT64_ARRAY(expected, actual, num_elements, line, message)      UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const _U_SINT*)(expected), (UNITY_PTR_ATTRIBUTE const _U_SINT*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_UINT64)
-#define UNITY_TEST_ASSERT_EQUAL_HEX64_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const _U_SINT*)(expected), (UNITY_PTR_ATTRIBUTE const _U_SINT*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX64)
-#define UNITY_TEST_ASSERT_HEX64_WITHIN(delta, expected, actual, line, message)                   UnityAssertNumbersWithin((_U_SINT)(delta), (_U_SINT)(expected), (_U_SINT)(actual), NULL, (UNITY_LINE_TYPE)line, UNITY_DISPLAY_STYLE_HEX64)
+#define UNITY_TEST_ASSERT_EQUAL_INT64(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT64, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT64(expected, actual, line, message)                          if (UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT64, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX64(expected, actual, line, message)                           if (UnityAssertEqualNumber((_U_SINT)(expected), (_U_SINT)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX64, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_INT64_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const _U_SINT*)(expected), (UNITY_PTR_ATTRIBUTE const _U_SINT*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_INT64, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_UINT64_ARRAY(expected, actual, num_elements, line, message)      if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const _U_SINT*)(expected), (UNITY_PTR_ATTRIBUTE const _U_SINT*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_UINT64, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_HEX64_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualIntArray((UNITY_PTR_ATTRIBUTE const _U_SINT*)(expected), (UNITY_PTR_ATTRIBUTE const _U_SINT*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX64, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_HEX64_WITHIN(delta, expected, actual, line, message)                   if (UnityAssertNumbersWithin((_U_SINT)(delta), (_U_SINT)(expected), (_U_SINT)(actual), NULL, (UNITY_LINE_TYPE)line, __FILE__, UNITY_DISPLAY_STYLE_HEX64) != 0, unity_p) return;
 #endif
 
 #ifdef UNITY_EXCLUDE_FLOAT
-#define UNITY_TEST_ASSERT_FLOAT_WITHIN(delta, expected, actual, line, message)                   UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled")
-#define UNITY_TEST_ASSERT_EQUAL_FLOAT(expected, actual, line, message)                           UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled")
-#define UNITY_TEST_ASSERT_EQUAL_FLOAT_ARRAY(expected, actual, num_elements, line, message)       UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled")
-#define UNITY_TEST_ASSERT_FLOAT_IS_INF(actual, line, message)                                    UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled")
-#define UNITY_TEST_ASSERT_FLOAT_IS_NEG_INF(actual, line, message)                                UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled")
-#define UNITY_TEST_ASSERT_FLOAT_IS_NAN(actual, line, message)                                    UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled")
+#define UNITY_TEST_ASSERT_FLOAT_WITHIN(delta, expected, actual, line, message)                   UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled", unity_p)
+#define UNITY_TEST_ASSERT_EQUAL_FLOAT(expected, actual, line, message)                           UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled", unity_p)
+#define UNITY_TEST_ASSERT_EQUAL_FLOAT_ARRAY(expected, actual, num_elements, line, message)       UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled", unity_p)
+#define UNITY_TEST_ASSERT_FLOAT_IS_INF(actual, line, message)                                    UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled", unity_p)
+#define UNITY_TEST_ASSERT_FLOAT_IS_NEG_INF(actual, line, message)                                UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled", unity_p)
+#define UNITY_TEST_ASSERT_FLOAT_IS_NAN(actual, line, message)                                    UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Floating Point Disabled", unity_p)
 #else
-#define UNITY_TEST_ASSERT_FLOAT_WITHIN(delta, expected, actual, line, message)                   UnityAssertFloatsWithin((_UF)(delta), (_UF)(expected), (_UF)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_EQUAL_FLOAT(expected, actual, line, message)                           UNITY_TEST_ASSERT_FLOAT_WITHIN((_UF)(expected) * (_UF)UNITY_FLOAT_PRECISION, (_UF)expected, (_UF)actual, (UNITY_LINE_TYPE)line, message)
-#define UNITY_TEST_ASSERT_EQUAL_FLOAT_ARRAY(expected, actual, num_elements, line, message)       UnityAssertEqualFloatArray((_UF*)(expected), (_UF*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_FLOAT_IS_INF(actual, line, message)                                    UnityAssertFloatIsInf((_UF)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_FLOAT_IS_NEG_INF(actual, line, message)                                UnityAssertFloatIsNegInf((_UF)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_FLOAT_IS_NAN(actual, line, message)                                    UnityAssertFloatIsNaN((_UF)(actual), (message), (UNITY_LINE_TYPE)line)
+#define UNITY_TEST_ASSERT_FLOAT_WITHIN(delta, expected, actual, line, message)                   if (UnityAssertFloatsWithin((_UF)(delta), (_UF)(expected), (_UF)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_FLOAT(expected, actual, line, message)                           UNITY_TEST_ASSERT_FLOAT_WITHIN((_UF)(expected) * (_UF)UNITY_FLOAT_PRECISION, (_UF)expected, (_UF)actual, (UNITY_LINE_TYPE)line, __FILE__, message, unity_p)
+#define UNITY_TEST_ASSERT_EQUAL_FLOAT_ARRAY(expected, actual, num_elements, line, message)       if (UnityAssertEqualFloatArray((_UF*)(expected), (_UF*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_FLOAT_IS_INF(actual, line, message)                                    if (UnityAssertFloatIsInf((_UF)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_FLOAT_IS_NEG_INF(actual, line, message)                                if (UnityAssertFloatIsNegInf((_UF)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_FLOAT_IS_NAN(actual, line, message)                                    if (UnityAssertFloatIsNaN((_UF)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
 #endif
 
 #ifdef UNITY_EXCLUDE_DOUBLE
-#define UNITY_TEST_ASSERT_DOUBLE_WITHIN(delta, expected, actual, line, message)                  UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled")
-#define UNITY_TEST_ASSERT_EQUAL_DOUBLE(expected, actual, line, message)                          UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled")
-#define UNITY_TEST_ASSERT_EQUAL_DOUBLE_ARRAY(expected, actual, num_elements, line, message)      UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled")
-#define UNITY_TEST_ASSERT_DOUBLE_IS_INF(actual, line, message)                                   UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled")
-#define UNITY_TEST_ASSERT_DOUBLE_IS_NEG_INF(actual, line, message)                               UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled")
-#define UNITY_TEST_ASSERT_DOUBLE_IS_NAN(actual, line, message)                                   UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled")
+#define UNITY_TEST_ASSERT_DOUBLE_WITHIN(delta, expected, actual, line, message)                  UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled", unity_p)
+#define UNITY_TEST_ASSERT_EQUAL_DOUBLE(expected, actual, line, message)                          UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled", unity_p)
+#define UNITY_TEST_ASSERT_EQUAL_DOUBLE_ARRAY(expected, actual, num_elements, line, message)      UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled", unity_p)
+#define UNITY_TEST_ASSERT_DOUBLE_IS_INF(actual, line, message)                                   UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled", unity_p)
+#define UNITY_TEST_ASSERT_DOUBLE_IS_NEG_INF(actual, line, message)                               UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled", unity_p)
+#define UNITY_TEST_ASSERT_DOUBLE_IS_NAN(actual, line, message)                                   UNITY_TEST_FAIL((UNITY_LINE_TYPE)line, "Unity Double Precision Disabled", unity_p)
 #else
-#define UNITY_TEST_ASSERT_DOUBLE_WITHIN(delta, expected, actual, line, message)                  UnityAssertDoublesWithin((_UD)(delta), (_UD)(expected), (_UD)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_EQUAL_DOUBLE(expected, actual, line, message)                          UNITY_TEST_ASSERT_DOUBLE_WITHIN((_UD)(expected) * (_UD)UNITY_DOUBLE_PRECISION, (_UD)expected, (_UD)actual, (UNITY_LINE_TYPE)line, message)
-#define UNITY_TEST_ASSERT_EQUAL_DOUBLE_ARRAY(expected, actual, num_elements, line, message)      UnityAssertEqualDoubleArray((_UD*)(expected), (_UD*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_DOUBLE_IS_INF(actual, line, message)                                   UnityAssertDoubleIsInf((_UD)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_DOUBLE_IS_NEG_INF(actual, line, message)                               UnityAssertDoubleIsNegInf((_UD)(actual), (message), (UNITY_LINE_TYPE)line)
-#define UNITY_TEST_ASSERT_DOUBLE_IS_NAN(actual, line, message)                                   UnityAssertDoubleIsNaN((_UD)(actual), (message), (UNITY_LINE_TYPE)line)
+#define UNITY_TEST_ASSERT_DOUBLE_WITHIN(delta, expected, actual, line, message)                  if (UnityAssertDoublesWithin((_UD)(delta), (_UD)(expected), (_UD)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_EQUAL_DOUBLE(expected, actual, line, message)                          UNITY_TEST_ASSERT_DOUBLE_WITHIN((_UD)(expected) * (_UD)UNITY_DOUBLE_PRECISION, (_UD)expected, (_UD)actual, (UNITY_LINE_TYPE)line, __FILE__, message, unity_p)
+#define UNITY_TEST_ASSERT_EQUAL_DOUBLE_ARRAY(expected, actual, num_elements, line, message)      if (UnityAssertEqualDoubleArray((_UD*)(expected), (_UD*)(actual), (_UU32)(num_elements), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_DOUBLE_IS_INF(actual, line, message)                                   if (UnityAssertDoubleIsInf((_UD)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_DOUBLE_IS_NEG_INF(actual, line, message)                               if (UnityAssertDoubleIsNegInf((_UD)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
+#define UNITY_TEST_ASSERT_DOUBLE_IS_NAN(actual, line, message)                                   if (UnityAssertDoubleIsNaN((_UD)(actual), (message), (UNITY_LINE_TYPE)line, __FILE__, unity_p) != 0) return;
 #endif
 
 #endif

@@ -8,19 +8,21 @@
 #define UNITY_FRAMEWORK_H
 
 #define UNITY
+#define UNITY_SUPPORT_64
+#define UNITY_USE_LIMITS_H
 
 #include "unity_internals.h"
 
 //-------------------------------------------------------
 // Configuration Options
 //-------------------------------------------------------
-// All options described below should be passed as a compiler flag to all files using Unity. If you must add #defines, place them BEFORE the #include above.
+// All options described below should be passed as a compiler flag to all files using unity_p-> If you must add #defines, place them BEFORE the #include above.
 
 // Integers/longs/pointers
 //     - Unity assumes 32 bit integers, longs, and pointers by default
 //     - If your compiler treats ints of a different size, options are:
 //       - define UNITY_USE_LIMITS_H to use limits.h to determine sizes
-//       - define UNITY_INT_WIDTH, UNITY_LONG_WIDTH, nand UNITY_POINTER_WIDTH
+//       - define UNITY_INT_WIDTH, UNITY_LONG_WIDTH, and UNITY_POINTER_WIDTH
 
 // Floats
 //     - define UNITY_EXCLUDE_FLOAT to disallow floating point comparisons
@@ -50,16 +52,17 @@
 // Test Running Macros
 //-------------------------------------------------------
 
-#define TEST_PROTECT() (setjmp(Unity.AbortFrame) == 0)
-
-#define TEST_ABORT() {longjmp(Unity.AbortFrame, 1);}
+/* DX_PATCH: jumpless version. setjmp changed to UNITY_TRUE*/
+#define TEST_PROTECT() (true)
+/* DX_PATCH: jumpless version.longjmp changed to return*/
+#define TEST_ABORT() {return true;}
 
 #ifndef RUN_TEST
-#define RUN_TEST(func, line_num) UnityDefaultTestRun(func, #func, line_num)
+#define RUN_TEST(func, line_num) UnityDefaultTestRun(func, #func, line_num, unity_p)
 #endif
 
-#define TEST_LINE_NUM (Unity.CurrentTestLineNumber)
-#define TEST_IS_IGNORED (Unity.CurrentTestIgnored)
+#define TEST_LINE_NUM (unity_p->CurrentTestLineNumber)
+#define TEST_IS_IGNORED (unity_p->CurrentTestIgnored)
 
 //-------------------------------------------------------
 // Basic Fail and Ignore
@@ -70,6 +73,8 @@
 #define TEST_IGNORE_MESSAGE(message)                                                               UNITY_TEST_IGNORE(__LINE__, message)
 #define TEST_IGNORE()                                                                              UNITY_TEST_IGNORE(__LINE__, NULL)
 #define TEST_ONLY()
+/* DX_PATCH: New feature - skip rest of function if test failed before getting to this point */
+#define TEST_SKIP_EXECUTION_ON_FAILURE()							   UNITY_TEST_SKIP_EXECUTION_ON_FAILURE(__LINE__, " Test failed earlier")
 
 //-------------------------------------------------------
 // Test Asserts (simple)
